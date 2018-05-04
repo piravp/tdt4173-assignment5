@@ -10,4 +10,4 @@ import numpy as np
 
 a = [7, 19, 2, 4]
 b = sorted(a, reverse=True)
-print(chr(97))
+print(str(chr(97)))

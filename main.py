@@ -189,11 +189,25 @@ def show_chars(image, pot_chars, window_size):
         plt.text(col+20, row, chr(fig[2]+97), fontsize=12)
         ax.add_patch(rect)
     plt.show()
+   
+# Predict the label probabilities for a single image
+def single_prediction(clf, image,label):
+    res = clf.predict_proba([image])
+    idx = 0
+    res_max = 0
+    # Find highest scoring label
+    for i in range(0,26):
+        if res[0][i] > res_max:
+            res_max = res[0][i]
+            idx = i
+    print('\nPredicted letter ' +str(chr(idx+97))+' with probability '+str(res_max))
+    print('Correct label: '+str(label))
     
 # Main method used for running the code
 # Each input variable defines which methods should be used
 # Last input is filename for detection image
 def run(SVM, NN, SCALING, HOG, CLASSIFICATION, DETECTION, detection_filename):
+    clf = None
     print("Loading...")
     # Load images
     images = load_images(not HOG)
@@ -213,10 +227,10 @@ def run(SVM, NN, SCALING, HOG, CLASSIFICATION, DETECTION, detection_filename):
         clf = svm_fit(train_x, train_y)
         if CLASSIFICATION:
             result = predict(clf, train_x, train_y)
-            print("\nPercentage correctly classified characters from training set using SMV: ")
+            print("\nPercentage correctly classified characters from training set using SVM: ")
             print("%.2f" % round(result*100,2))
             result = predict(clf, test_x, test_y)
-            print("\nPercentage correctly classified characters from test set using SMV: ")
+            print("\nPercentage correctly classified characters from test set using SVM: ")
             print("%.2f" % round(result*100,2))
         # If DETECTION, use classifier to detect characters in an image
         if DETECTION:
@@ -238,6 +252,7 @@ def run(SVM, NN, SCALING, HOG, CLASSIFICATION, DETECTION, detection_filename):
             window_size = 20
             pot_chars, image = detection(detection_filename, clf, window_size, HOG, SCALING)
             show_chars(image, pot_chars, window_size)
+    return clf
 
 # Path for chars74k-lite folder
 # Detection images in same folder as the program
@@ -246,17 +261,34 @@ FOLDER = '/chars74k-lite'
 FULL_PATH = PATH + FOLDER
 
 # Inputs for running the program
-SVM = False             # Fit classifier using SVM (SVC)
+SVM = True             # Fit classifier using SVM (SVC)
 NN = True               # Fit classifier using Neural Networks
 SCALING = True          # Use scaling for preprocessing     
 HOG = True              # Use Histogram of Oriented Gradients for preprocessing
 CLASSIFICATION = True   # Use classifier to predict labels of images   
 DETECTION = False       # Use classifier to detect multiple characters in an image
-detection_filename = 'detection-2.jpg'  # Filename for the file with characters to be detected
+SINGLES = False          # Single image probability predictions
+detection_filename = 'detection-1.jpg'  # Filename for the file with characters to be detected
+# Having both NN and DETECTION set to True requires substantil processing time
 
 # MAIN FUNCTION
-run(SVM, NN, SCALING, HOG, CLASSIFICATION, DETECTION, detection_filename)
-        
+clf = run(SVM, NN, SCALING, HOG, CLASSIFICATION, DETECTION, detection_filename)
+      
+# SINGLE PREDICTION
+if SINGLES:
+    images = load_images(not HOG)
+    if HOG:
+        images = pre_hog(images)
+    if SCALING:
+        images = pre_scaling(images)
+        num = 10
+        single_prediction(clf,images['a'][num],'a')
+        single_prediction(clf,images['e'][num],'e')  
+        single_prediction(clf,images['g'][num],'g')  
+        single_prediction(clf,images['k'][num],'k')  
+        single_prediction(clf,images['r'][num],'r')  
+        single_prediction(clf,images['t'][num],'t')
+        single_prediction(clf,images['w'][num],'w')    
 
 
 
