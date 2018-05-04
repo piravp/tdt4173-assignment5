@@ -118,14 +118,14 @@ def crop_image(image, sensitivity):
     
 def detection(filename, clf, window_size, HOG, SCALING):
     print("Detecting...")
-    threshold = 0.9
+    threshold = 0.86
     image = load_detection_image(filename)
     image = crop_image(image, 3)
     max_row = image.shape[0]
     max_col = image.shape[1]
     pot_chars = []
-    for row in range(0,max_row-window_size,4):
-        for col in range(0,max_col-window_size,4):
+    for row in range(0,max_row-window_size,2):
+        for col in range(0,max_col-window_size,2):
             sub_img = image[np.ix_(range(row,row+window_size),range(col,col+window_size))]
             sub_img = sub_img/255
             if HOG:
@@ -144,48 +144,31 @@ def detection(filename, clf, window_size, HOG, SCALING):
                     idx = i
             if res_max > threshold:
                 pot_chars.append((row,col,idx,res_max))
-            if False:
+            if True:
                 pot_chars = refine_chars(pot_chars)
     return pot_chars, image
-    
+
+
 def refine_chars(pot_chars):
     new_chars = pot_chars[:]
     to_delete = []
-    neigh = dict()
     for idx, fig in enumerate(pot_chars):
         row = fig[0]
         col = fig[1]
         for new_idx, new_fig in enumerate(new_chars):
             new_row = new_fig[0]
             new_col = new_fig[1]
-            if abs(row-new_row) < 10 and abs(col-new_col) <10 and idx != new_idx:
-                if idx not in neigh:
-                    neigh[idx] = [idx]
-                neigh[idx].append(new_idx)
-    for key in neigh:
-        letters = dict()
-        for fig_idx in neigh[k]:
-            fig = pot_chars[fig_idx]
-            letter = fig[2]
-            if letter not in letters:
-                letters[letter] = 1
-            else:
-                letters[letter] += 1
-        best_letter = max(letters.items(), key=operator.itemgetter(1))[0]
-        for fig_idx in neigh[k]:
-            fig = pot_chars[fig_idx]
-            letter = fig[2]
-            if letter != best_letter:
-                to_delete.append(fig_idx)
-            else:
-                pass
+            if abs(row-new_row) < 7 and abs(col-new_col) < 7 and idx != new_idx:
+                if fig[3] > new_fig[3]:
+                    to_delete.append(new_idx)
     
     to_delete = list(set(to_delete))
     li = sorted(to_delete, reverse=True)
     for i in li:
-        print(i)
         del pot_chars[i]                      
     return pot_chars
+
+
 
 def show_chars(image, pot_chars, window_size):
     fig, ax = plt.subplots(1)
@@ -194,6 +177,7 @@ def show_chars(image, pot_chars, window_size):
         row = fig[0]
         col = fig[1]
         rect = patches.Rectangle((col,row),20,20,linewidth=1,edgecolor='r',facecolor='none')
+        plt.text(col+20, row, chr(fig[2]+97), fontsize=12)
         ax.add_patch(rect)
     plt.show()
     
