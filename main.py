@@ -145,7 +145,8 @@ def detection(filename, clf, window_size, HOG, SCALING):
             if True:
                 pot_chars = refine_chars(pot_chars)
     return pot_chars, image
-    
+
+
 def refine_chars(pot_chars):
     new_chars = pot_chars[:]
     to_delete = []
@@ -155,14 +156,16 @@ def refine_chars(pot_chars):
         for new_idx, new_fig in enumerate(new_chars):
             new_row = new_fig[0]
             new_col = new_fig[1]
-            if abs(row-new_row) < 9 and abs(col-new_col) < 9 and idx != new_idx:
-                if fig[3] > new_fig[3]:        
+            if abs(row-new_row) < 7 and abs(col-new_col) < 7 and idx != new_idx:
+                if fig[3] > new_fig[3]:
                     to_delete.append(new_idx)
     to_delete = list(set(to_delete))
     li = sorted(to_delete, reverse=True)
     for i in li:
         del pot_chars[i]                      
     return pot_chars
+
+
 
 def show_chars(image, pot_chars, window_size):
     fig, ax = plt.subplots(1)
@@ -171,6 +174,7 @@ def show_chars(image, pot_chars, window_size):
         row = fig[0]
         col = fig[1]
         rect = patches.Rectangle((col,row),20,20,linewidth=1,edgecolor='r',facecolor='none')
+        plt.text(col+20, row, chr(fig[2]+97), fontsize=12)
         ax.add_patch(rect)
     plt.show()
     
