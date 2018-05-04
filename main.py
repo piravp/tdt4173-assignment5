@@ -10,34 +10,39 @@ from sklearn.neural_network import MLPClassifier
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
-PATH = os.path.dirname(os.path.abspath(__file__))
-FOLDER = '/chars74k-lite'
-
-FULL_PATH = PATH + FOLDER
-
+# Loads images from the chars74k-lite dataset and loads it into a dictionary
+# flatten - boolean variable, set to True if the images needs to be flattened
+# returns images, a dictionary with a np-array with np-arrays
 def load_images(flatten):
     images = OrderedDict()
     first = True
+    # Iterate over each character-folder
     for folder in os.walk(FULL_PATH):
-        letter_path = folder[0]
-        letter = letter_path[-1]
+        # First iteration is over the root folder 
         if first:
             first = False
             continue
+        # Path to the characterfolder
+        letter_path = folder[0]
+        letter = letter_path[-1]
         idx = 0
         letters = [[]]
+        # Iterate over each image
         for file in os.listdir(letter_path):
             if file.endswith(".jpg"):
+                # Open the image and convert it into a numpy array
                 image = Image.open(letter_path + '/' + file)
                 pix = np.array(image)
                 if flatten:
                     pix = pix.flatten()
+                # Scale pixels to 0:1 range
                 letters.append(pix/255)
                 idx += 1
+        # Remove the first instance, which is empty
         images[letter] = np.array(letters)[1:]
     return images
             
-
+# Preprocessing using scaling to have unit variance and 0 mean
 def pre_scaling(images):
     for letter in images:
         for img_idx in range (0, images[letter].size):
@@ -45,6 +50,7 @@ def pre_scaling(images):
             images[letter][img_idx] = pp.scale(img)
     return images
 
+# Preprocessing using Histogram of Oriented Gradients
 def pre_hog(images):
     for letter in images:
         for idx in range(0,len(images[letter])):
@@ -52,6 +58,9 @@ def pre_hog(images):
             images[letter][idx] = skimage.hog(img, orientations = 10,pixels_per_cell=(5,5), cells_per_block=(1,1))
     return images
 
+# Divide the dataset into training data and test data
+# Modifies images into training data
+# Returns test data
 def divide_dataset(images, test_percentage):
     test_set = OrderedDict()
     for letter in images:
@@ -65,12 +74,15 @@ def divide_dataset(images, test_percentage):
         test_set[letter] = np.array(letter_list)[1:]
     return test_set
 
+# Fit SVM (SVC) classifier
 def svm_fit(x,y):
     clf = SVC(probability=True)
     clf.fit(x,y)
     return clf
 
-def svm_predict(clf, test_x, test_y):
+# Predict values for x using a fitted classifier and comparing the results to
+# the label. Returning percentage correclty classified images
+def predict(clf, test_x , test_y):
     correct = 0
     total = 0
     for i in range(0, len(test_x)):
@@ -79,7 +91,8 @@ def svm_predict(clf, test_x, test_y):
             correct += 1
         total += 1
     return correct/total
-    
+
+# Create feature-label pairs to be passed to classifiers    
 def create_labels(images):
     x = []
     y = []
@@ -91,82 +104,81 @@ def create_labels(images):
         idx += 1
     return x,y
     
+# Fit a Neural Network classifier
 def nn_fit(x,y):
-    clf = MLPClassifier(solver='lbfgs', alpha=0.05, hidden_layer_sizes=(120, 80, 40), random_state=1, learning_rate_init = 0.2, learning_rate = 'adaptive')
+    clf = MLPClassifier(solver='lbfgs', alpha=0.05, hidden_layer_sizes=(80, 40), random_state=1, learning_rate_init = 0.2, learning_rate = 'adaptive')
     clf.fit(x,y)
     return clf
 
-def nn_predict(clf, test_x , test_y):
-    correct = 0
-    total = 0
-    for i in range(0, len(test_x)):
-        y_predicted = clf.predict([test_x[i]])
-        if y_predicted == test_y[i]:
-            correct += 1
-        total += 1
-    return correct/total
-
+# Load image used for detection
 def load_detection_image(filename):
     image = Image.open(filename)
     pix = np.array(image)
     return pix
 
-def crop_image(image, sensitivity):
-    return image
-    
+# Detect characters in an image, using sliding window    
 def detection(filename, clf, window_size, HOG, SCALING):
     print("Detecting...")
-    threshold = 0.86
+    threshold = 0.86                            # Threshold for including image
     image = load_detection_image(filename)
-    image = crop_image(image, 3)
     max_row = image.shape[0]
     max_col = image.shape[1]
     pot_chars = []
+    # Iterate over the rows and columns of the image
     for row in range(0,max_row-window_size,2):
         for col in range(0,max_col-window_size,2):
+            # Define and scale partial image
             sub_img = image[np.ix_(range(row,row+window_size),range(col,col+window_size))]
             sub_img = sub_img/255
             if HOG:
                 sub_img = skimage.hog(sub_img, orientations = 10,pixels_per_cell=(5,5), cells_per_block=(1,1))
             if SCALING:
                 sub_img = pp.scale(sub_img)
+            # HOG flattens, so if not used it has to be done manually
             if not HOG:
                 sub_img = sub_img.flatten()
-            #Shape 1, 26
+            # Predict probabilities
             res = clf.predict_proba([sub_img])
             res_max = 0
             idx = 0
+            # Find label with highest probability
             for i in range(0,26):
                 if res[0][i] > res_max:
                     res_max = res[0][i]
                     idx = i
+            # If the probability is above the threshold, add to list of 
+            # potential characters in the image
             if res_max > threshold:
                 pot_chars.append((row,col,idx,res_max))
+            # Refine potential characters to limit neighbours
+            # Inside if-sentence for debugging purposes
             if True:
                 pot_chars = refine_chars(pot_chars)
     return pot_chars, image
 
-
+# Removes potential characters close to eachother
 def refine_chars(pot_chars):
     new_chars = pot_chars[:]
     to_delete = []
+    # Double loop through all potential characters
     for idx, fig in enumerate(pot_chars):
         row = fig[0]
         col = fig[1]
         for new_idx, new_fig in enumerate(new_chars):
             new_row = new_fig[0]
             new_col = new_fig[1]
+            # If they are sufficiently close and one has suppirior value, delete the other
             if abs(row-new_row) < 7 and abs(col-new_col) < 7 and idx != new_idx:
                 if fig[3] > new_fig[3]:
                     to_delete.append(new_idx)
+    # Delete all characters identified to be shaved off
     to_delete = list(set(to_delete))
     li = sorted(to_delete, reverse=True)
     for i in li:
         del pot_chars[i]                      
     return pot_chars
 
-
-
+# Plot detection image and boxes around identified characters
 def show_chars(image, pot_chars, window_size):
     fig, ax = plt.subplots(1)
     ax.imshow(image, cmap='gray')
@@ -178,49 +190,71 @@ def show_chars(image, pot_chars, window_size):
         ax.add_patch(rect)
     plt.show()
     
-
-
+# Main method used for running the code
+# Each input variable defines which methods should be used
+# Last input is filename for detection image
 def run(SVM, NN, SCALING, HOG, CLASSIFICATION, DETECTION, detection_filename):
     print("Loading...")
+    # Load images
     images = load_images(not HOG)
+    # Preprocess images
     if HOG:
         images = pre_hog(images)
     if SCALING:
         images = pre_scaling(images)
+    # Divide dataset
     test_images = divide_dataset(images, 0.2)
+    # Make the dataset into a suitable format for the classifiers
     train_x, train_y = create_labels(images)
     test_x, test_y = create_labels(test_images)
     print("Fitting...")
+    # If SVM, fit SVM (SVC) classifier, predict and print results
     if SVM:
         clf = svm_fit(train_x, train_y)
         if CLASSIFICATION:
-            result = svm_predict(clf, test_x, test_y)
-            print("\nPercentage correctly classified characters using SMV: ")
+            result = predict(clf, train_x, train_y)
+            print("\nPercentage correctly classified characters from training set using SMV: ")
             print("%.2f" % round(result*100,2))
+            result = predict(clf, test_x, test_y)
+            print("\nPercentage correctly classified characters from test set using SMV: ")
+            print("%.2f" % round(result*100,2))
+        # If DETECTION, use classifier to detect characters in an image
         if DETECTION:
             window_size = 20
             pot_chars, image = detection(detection_filename, clf, window_size, HOG, SCALING)
             show_chars(image, pot_chars, window_size)
+    # If NN, fit NN classifier, predict and print results
     if NN:
-        clf = svm_fit(train_x, train_y)
+        clf = nn_fit(train_x, train_y)
         if CLASSIFICATION:
-            result = svm_predict(clf, test_x, test_y)
-            print("\nPercentage correctly classified characters using NN: ")
+            result = predict(clf, train_x, train_y)
+            print("\nPercentage correctly classified characters from training set using NN: ")
             print("%.2f" % round(result*100,2))
+            result = predict(clf, test_x, test_y)
+            print("\nPercentage correctly classified characters from test set using NN: ")
+            print("%.2f" % round(result*100,2))
+        # If DETECTION, use classifier to detect characters in an image
         if DETECTION:
             window_size = 20
             pot_chars, image = detection(detection_filename, clf, window_size, HOG, SCALING)
             show_chars(image, pot_chars, window_size)
 
-#Inputs for running the program
-SVM = False
-NN = True
-SCALING = True
-HOG = True
-CLASSIFICATION = False
-DETECTION = True
-detection_filename = 'detection-2.jpg'
+# Path for chars74k-lite folder
+# Detection images in same folder as the program
+PATH = os.path.dirname(os.path.abspath(__file__))
+FOLDER = '/chars74k-lite'
+FULL_PATH = PATH + FOLDER
 
+# Inputs for running the program
+SVM = False             # Fit classifier using SVM (SVC)
+NN = True               # Fit classifier using Neural Networks
+SCALING = True          # Use scaling for preprocessing     
+HOG = True              # Use Histogram of Oriented Gradients for preprocessing
+CLASSIFICATION = True   # Use classifier to predict labels of images   
+DETECTION = False       # Use classifier to detect multiple characters in an image
+detection_filename = 'detection-2.jpg'  # Filename for the file with characters to be detected
+
+# MAIN FUNCTION
 run(SVM, NN, SCALING, HOG, CLASSIFICATION, DETECTION, detection_filename)
         
 
