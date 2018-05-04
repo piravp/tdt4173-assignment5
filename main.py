@@ -8,8 +8,8 @@ from sklearn import svm
 PATH = os.path.dirname(os.path.abspath(__file__))
 FOLDER = '/chars74k-lite'
 
-FULL_PATH = PATH + FOLDER
 
+FULL_PATH = PATH + FOLDER
 
 def load_images():
     images = dict()
@@ -61,8 +61,6 @@ test_images = divide_dataset(images, 0.2)
 
 
         
-
-
 
 
 
