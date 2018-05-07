@@ -119,42 +119,66 @@ def load_detection_image(filename):
 # Detect characters in an image, using sliding window    
 def detection(filename, clf, window_size, HOG, SCALING):
     print("Detecting...")
-    threshold = 0.86                            # Threshold for including image
+    threshold = 0.6                            # Threshold for including image
     image = load_detection_image(filename)
     max_row = image.shape[0]
     max_col = image.shape[1]
     pot_chars = []
     # Iterate over the rows and columns of the image
-    for row in range(0,max_row-window_size,2):
-        for col in range(0,max_col-window_size,2):
+    for row in range(0,max_row-window_size,1):
+        for col in range(0,max_col-window_size,1):
             # Define and scale partial image
             sub_img = image[np.ix_(range(row,row+window_size),range(col,col+window_size))]
-            sub_img = sub_img/255
-            if HOG:
-                sub_img = skimage.hog(sub_img, orientations = 10,pixels_per_cell=(5,5), cells_per_block=(1,1))
-            if SCALING:
-                sub_img = pp.scale(sub_img)
-            # HOG flattens, so if not used it has to be done manually
-            if not HOG:
-                sub_img = sub_img.flatten()
-            # Predict probabilities
-            res = clf.predict_proba([sub_img])
-            res_max = 0
-            idx = 0
-            # Find label with highest probability
-            for i in range(0,26):
-                if res[0][i] > res_max:
-                    res_max = res[0][i]
-                    idx = i
-            # If the probability is above the threshold, add to list of 
-            # potential characters in the image
-            if res_max > threshold:
-                pot_chars.append((row,col,idx,res_max))
-            # Refine potential characters to limit neighbours
-            # Inside if-sentence for debugging purposes
-            if True:
-                pot_chars = refine_chars(pot_chars)
+            if check_edges(sub_img):
+                old_sub_img = sub_img/255
+                for i in range (0,4):
+                    sub_img = np.rot90(old_sub_img, k=i)
+                    if HOG:
+                        sub_img = skimage.hog(sub_img, orientations = 10,pixels_per_cell=(5,5), cells_per_block=(1,1))
+                    if SCALING:
+                        sub_img = pp.scale(sub_img)
+                    # HOG flattens, so if not used it has to be done manually
+                    if not HOG:
+                        sub_img = sub_img.flatten()
+                    # Predict probabilities
+                    res = clf.predict_proba([sub_img])
+                    res_max = 0
+                    idx = 0
+                    # Find label with highest probability
+                    for i in range(0,26):
+                        if res[0][i] > res_max:
+                            res_max = res[0][i]
+                            idx = i
+                    # If the probability is above the threshold, add to list of 
+                    # potential characters in the image
+                    if res_max > threshold:
+                        pot_chars.append((row,col,idx,res_max))
+                        break
+    # Refine potential characters to limit neighbours
+    # Inside if-sentence for debugging purposes
+    if True:
+        pot_chars = refine_chars(pot_chars)
     return pot_chars, image
+
+def check_edges(img):
+    x = img.shape[0]
+    y = img.shape[1]
+    top = 0
+    bottom = 0
+    left = 0
+    right = 0
+    for i in range (0,x):
+        if img[i][2] == 255:
+            top +=1
+        if img[i][y-3] == 255:
+            bottom +=1
+    for i in range(0,y):
+        if img[2][i] == 255:
+            left+=1
+        if img[x-3][i] == 255:
+            right +=1
+    return (top < 3 and bottom < 3 and left < 5 and right <5)
+            
 
 # Removes potential characters close to eachother
 def refine_chars(pot_chars):
@@ -168,7 +192,7 @@ def refine_chars(pot_chars):
             new_row = new_fig[0]
             new_col = new_fig[1]
             # If they are sufficiently close and one has suppirior value, delete the other
-            if abs(row-new_row) < 7 and abs(col-new_col) < 7 and idx != new_idx:
+            if abs(row-new_row) < 11 and abs(col-new_col) < 11 and idx != new_idx:
                 if fig[3] > new_fig[3]:
                     to_delete.append(new_idx)
     # Delete all characters identified to be shaved off
@@ -185,7 +209,7 @@ def show_chars(image, pot_chars, window_size):
     for fig in pot_chars:
         row = fig[0]
         col = fig[1]
-        rect = patches.Rectangle((col,row),20,20,linewidth=1,edgecolor='r',facecolor='none')
+        rect = patches.Rectangle((col-1,row-1),20,20,linewidth=1,edgecolor='r',facecolor='none')
         plt.text(col+20, row, chr(fig[2]+97), fontsize=12)
         ax.add_patch(rect)
     plt.show()
@@ -217,7 +241,7 @@ def run(SVM, NN, SCALING, HOG, CLASSIFICATION, DETECTION, detection_filename):
     if SCALING:
         images = pre_scaling(images)
     # Divide dataset
-    test_images = divide_dataset(images, 0.2)
+    test_images = divide_dataset(images, 0)
     # Make the dataset into a suitable format for the classifiers
     train_x, train_y = create_labels(images)
     test_x, test_y = create_labels(test_images)
@@ -262,13 +286,13 @@ FULL_PATH = PATH + FOLDER
 
 # Inputs for running the program
 SVM = True             # Fit classifier using SVM (SVC)
-NN = True               # Fit classifier using Neural Networks
+NN = False               # Fit classifier using Neural Networks
 SCALING = True          # Use scaling for preprocessing     
 HOG = True              # Use Histogram of Oriented Gradients for preprocessing
-CLASSIFICATION = True   # Use classifier to predict labels of images   
-DETECTION = False       # Use classifier to detect multiple characters in an image
+CLASSIFICATION = False   # Use classifier to predict labels of images   
+DETECTION = True       # Use classifier to detect multiple characters in an image
 SINGLES = False          # Single image probability predictions
-detection_filename = 'detection-1.jpg'  # Filename for the file with characters to be detected
+detection_filename = 'detection-2.jpg'  # Filename for the file with characters to be detected
 # Having both NN and DETECTION set to True requires substantil processing time
 
 # MAIN FUNCTION
